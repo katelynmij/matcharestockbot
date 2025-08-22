@@ -27,16 +27,15 @@ urls = {
 
 last_status = {name: None for name in urls.keys()}
 
-async def send_embed(channel, title, description, color=discord.Color.green(), image_url=None, big_image=False):
+async def send_embed(channel, title, description, color=discord.Color.green(), image_url=None):
     embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text=f"Checked at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     if image_url:
         if big_image:
-            embed.set_image(url=image_url) #full width image
-        else:
-            embed.set_thumbnail(url=image_url) #icon style image
+            embed.set_thumbnail(url=image_url)
+        await channel.send(embed=embed)
+           
 
-    await channel.send(embed=embed)
 
 def scrape_product_info(url):
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -67,18 +66,18 @@ async def check_stock(name, url, send_to_channel=True, message=None, force=False
                 title = f" {name} is in stock!"
                 description = f"@here purchase here: {url}"
                 color = discord.Color.green()
-                big_image = True
+            
             else:
                 title = f" {name} is sold out."
                 description = f"last checked: {url}"
                 color = discord.Color.red()
-                big_image = False
+ 
             
             last_status[name] = new_status
 
             if send_to_channel or message:
                 target_channel = message.channel if message else client.get_channel(CHANNEL_ID)
-                await send_embed(target_channel, title, description, color, image_url, big_image)
+                await send_embed(target_channel, title, description, color, image_url)
         
         
 
