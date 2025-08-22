@@ -27,52 +27,75 @@ urls = {
 
 last_status = {name: None for name in urls.keys()}
 
+async def send_embed(channel, title, description, color=discord.Color.green(), image_url=None, big_image=False):
+    embed = discord.Embed(title=title, description=description, color=color)
+    embed.set_footer(text=f"Checked at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if image_url:
+        if big_image:
+            embed.set_image(url=image_url) #full width image
+        else:
+            embed.set_thumbnail(url=image_url) #icon style image
+
+    await channel.send(embed=embed)
+
+def scrape_product_info(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(url, headers=headers, timeout=10)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    #detect sold out
+    sold_out = soup.find(string=lambda t: "Sold Out" in t or "Our of Stock" in t or "currently unavailable" in t)
+    status = "in stock" if not sold_out else "sold out"
+
+    #grab first product image
+    img_tag = soup.find("img")
+    image_url = None
+    if img_tag and img_tag.get("src"):
+        image_url = img_tag["src"]
+        if image_url.startswith("//"):
+            image_url = "https:" + image_url
+    return status, image_url
+
+
 async def check_stock(name, url, send_to_channel=True, message=None, force=False):
     try:
-        #headers to mimic a browser
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64, x64) "
-                            "AppleWebKit/537.36 (KHTML, like Gecko) "
-                            "Chrome/114.0.0.0 Safari/537.36"
-
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        #right click on website, "inspect", find out how "sold out" is displayed
-        sold_out = soup.find(string=lambda t: "Sold Out" in t or "Out of Stock" in t or "currently unavailable" in t)
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        #determines the new status of a product
-        new_status = "in stock" if not sold_out else "sold out"
-
+        new_status, image_url = scrape_product_info(url)
         global last_status
-        result = None
 
         if force or last_status[name] != new_status:
             if new_status == "in stock":
-                result = f"[{now}] {name} is in stock! {url}"
+                title = f" {name} is in stock!"
+                description = f"@here purchase here: {url}"
+                color = discord.Color.green()
+                big_image = True
             else:
-                result = f"[{now}] {name} is now sold out."
-            last_status[name] = new_status #update status
+                title = f" {name} is sold out."
+                description = f"last checked: {url}"
+                color = discord.Color.red()
+                big_image = False
+            
+            last_status[name] = new_status
+
+            if send_to_channel or message:
+                target_channel = message.channel if message else client.get_channel(CHANNEL_ID)
+                await send_embed(target_channel, title, description, color, image_url, big_image)
         
-        if result:
-            if send_to_channel:
-                channel = client.get_channel(CHANNEL_ID)
-                await channel.send(result)
-            elif message:
-                await message.channel.send(result)
+        
 
     except Exception as e:
         error_msg = f"Error checking {name}: {e}"
         if message:
-            await message.channel.send(error_msg)
+            await send_embed(message.channel, "Error", error_msg, discord.Color.orange())
         else:
             print(error_msg)
 
 async def stock_loop():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
-    await channel.send("Stock checker bot is online!")
+
+
+    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3", discord.Color.blue())
+    
     while not client.is_closed():
         for name, url in urls.items():
             await check_stock(name, url)
@@ -81,9 +104,7 @@ async def stock_loop():
 def find_product(query):
     #fuzzy matching
     query_lower = query.lower()
-    partial_matches = [name for name in urls.keys() if query_lower in name.lower()]
-    if partial_matches:
-        return partial_matches
+    return [name for name in urls.keys() if query_lower in name.lower()]
 
 
 @client.event
@@ -104,12 +125,18 @@ async def on_message(message):
             await check_stock(matches[0], urls[matches[0]], send_to_channel=False, message=message, force=True)
 
             if len(matches) > 1:
-                await message.channel.send(
-                    "Other possible matches:\n" + "\n".join(matches[1:])
+                await send_embed(
+                    message.channel,
+                    "Other possible matches",
+                    "\n".join(matches[1:]),
+                    discord.Color.dark_blue()
                 )
         else:
-            await message.channel.send(
-                "I couldn't find any product matching that. Try one of these:\n"
+            await send_embed(
+                message.channel,
+                "No matches found",
+                "try one of these:\n" + "\n".join(urls.keys()),
+                discord.Color.orange()
             )
 
 
