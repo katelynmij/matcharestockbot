@@ -43,17 +43,28 @@ def scrape_product_info(url):
     response = requests.get(url, headers=headers, timeout=10)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    #detect sold out
-    sold_out = soup.find(string=lambda t: "Sold Out" in t or "Our of Stock" in t or "currently unavailable" in t)
+    #sold out detection
+    sold_out_phrases = [
+        "sold out",
+        "out of stock",
+        "currently unavailable",
+        "new restock scheduled"
+    ]
+    text = soup.get_text(" ", strip=True).lower()
+    sold_out = any(phrase in text for phrase in sold_out_phrases)
     status = "in stock" if not sold_out else "sold out"
 
-    #grab first product image
-    img_tag = soup.find("img")
+    #grabbing product image
     image_url = None
-    if img_tag and img_tag.get("src"):
-        image_url = img_tag["src"]
-        if image_url.startswith("//"):
-            image_url = "https:" + image_url
+    og_image = soup.find("meta", property="og:image")
+    if og_image and og_image.get("content"):
+        image_url = og_image["content"]
+    else:
+        img_tag = soup.find("img")
+        if img_tag and img_tag.get("src"):
+            image_url = img_tag["src"]
+            if image_url.startswith("//"):
+                image_url = "https:" + image_url
     return status, image_url
 
 
@@ -65,12 +76,12 @@ async def check_stock(name, url, send_to_channel=True, message=None, force=False
         if force or last_status[name] != new_status:
             if new_status == "in stock":
                 title = f" {name} is in stock!"
-                description = f"@here purchase here: {url}"
+                description = f"@here purchase here: <{url}>"
                 color = discord.Color.green()
             
             else:
                 title = f" {name} is sold out."
-                description = f"last checked: {url}"
+                description = f"last checked: <{url}>"
                 color = discord.Color.red()
  
             
