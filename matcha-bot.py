@@ -94,7 +94,7 @@ async def stock_loop():
     channel = client.get_channel(CHANNEL_ID)
 
 
-    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3", discord.Color.blue())
+    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3", "type !nameofproduct to check it status!", discord.Color.blue())
     
     while not client.is_closed():
         for name, url in urls.items():
