@@ -6,6 +6,8 @@ import datetime
 import difflib
 from dotenv import load_dotenv
 import os
+import threading
+from server import app
 
 load_dotenv()
 TOKEN = os.environ['DISCORD_TOKEN']
@@ -31,9 +33,8 @@ async def send_embed(channel, title, description, color=discord.Color.green(), i
     embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text=f"Checked at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     if image_url:
-        if big_image:
-            embed.set_thumbnail(url=image_url)
-        await channel.send(embed=embed)
+        embed.set_thumbnail(url=image_url)
+    await channel.send(embed=embed)
            
 
 
@@ -93,7 +94,7 @@ async def stock_loop():
     channel = client.get_channel(CHANNEL_ID)
 
 
-    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3", "type !nameofproduct to check it status!", discord.Color.blue())
+    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3\nType !nameofproduct to check it status!", color=discord.Color.blue())
     
     while not client.is_closed():
         for name, url in urls.items():
@@ -138,5 +139,10 @@ async def on_message(message):
                 discord.Color.orange()
             )
 
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_flask).start()
 
 client.run(TOKEN)
