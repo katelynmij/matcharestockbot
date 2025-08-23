@@ -54,3 +54,16 @@ def get_products():
     cur.close()
     conn.close()
     return products
+
+def get_product_by_name(name):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, name, url, in_stock, last_checked
+        FROM products
+        WHERE name ILIKE %s;
+     """, (name,))
+    product = cur.fetchone()
+    cur.close()
+    conn.close()
+    return product
