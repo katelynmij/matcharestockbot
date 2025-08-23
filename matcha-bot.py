@@ -3,11 +3,11 @@ import requests
 from bs4 import BeautifulSoup
 import asyncio
 import datetime
-import difflib
 from dotenv import load_dotenv
 import os
 import threading
 from server import app
+from db import add_product, update_stock, get_products, get_product_by_name
 
 load_dotenv()
 TOKEN = os.environ['DISCORD_TOKEN']
@@ -17,17 +17,8 @@ intents = discord.Intents.default()
 intents.message_content = True 
 client = discord.Client(intents=intents)
 
-#needs to be replaced with actual product pages
-#like each product
-urls = {
-    "Yugen Matcha #0": "https://www.yugen-kyoto.com/en-us/products/matcha0-yugen-original-blend",
-    "Yugen Matcha #1": "https://www.yugen-kyoto.com/en-us/products/matcha1-yugen-original-blend",
-    "Yugen Matcha #2": "https://www.yugen-kyoto.com/en-us/products/matcha2-yugen-original-blend",
-    "Ippodo Matcha Sayaka 40g": "https://ippodotea.com/collections/matcha/products/sayaka-no-mukashi",
-    "Ippodo Matcha Ikuyo 30g": "https://ippodotea.com/collections/matcha/products/ikuyo"
-}
-
-last_status = {name: None for name in urls.keys()}
+#store last known stock status
+last_status = {}
 
 async def send_embed(channel, title, description, color=discord.Color.green(), image_url=None):
     embed = discord.Embed(title=title, description=description, color=color)
@@ -68,54 +59,52 @@ def scrape_product_info(url):
     return status, image_url
 
 
-async def check_stock(name, url, send_to_channel=True, message=None, force=False):
+async def check_stock(product, send_to_channel=True, message=None, force=False):
     try:
+        product_id, name, url, in_stock, _ = product
         new_status, image_url = scrape_product_info(url)
-        global last_status
 
-        if force or last_status[name] != new_status:
-            if new_status == "in stock":
-                title = f" {name} is in stock!"
-                description = f"@here purchase here: <{url}>"
-                color = discord.Color.green()
-            
-            else:
-                title = f" {name} is sold out."
-                description = f"last checked: <{url}>"
-                color = discord.Color.red()
- 
-            
+        last = last_status.get(name)
+        if force or last != new_status:
+            #update database if status changed
+            update_stock(product_id, new_status == "in stock")
             last_status[name] = new_status
 
+            if new_status == "in stock":
+                title = f"{name} is in stock!"
+                description = f"@here purchase here: <{url}>"
+                color = discord.Color.green()
+            else:
+                title = f"{name} is sold out."
+                description = f"Last checked: <{url}>"
+                color = discord.Color.red()
+            
             if send_to_channel or message:
                 target_channel = message.channel if message else client.get_channel(CHANNEL_ID)
                 await send_embed(target_channel, title, description, color, image_url)
-        
-        
-
     except Exception as e:
         error_msg = f"Error checking {name}: {e}"
         if message:
             await send_embed(message.channel, "Error", error_msg, discord.Color.orange())
         else:
             print(error_msg)
-
+        
 async def stock_loop():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
-
-
     await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3\nType !nameofproduct to check it status!", color=discord.Color.blue())
     
     while not client.is_closed():
-        for name, url in urls.items():
-            await check_stock(name, url)
-        await asyncio.sleep(60 * 5) #check every 5 min
+        products = get_products()
+        for product in products:
+            await check_stock(product)
+        await asyncio.sleep(60 * 5) #check every five minutes
 
 def find_product(query):
     #fuzzy matching
     query_lower = query.lower()
-    return [name for name in urls.keys() if query_lower in name.lower()]
+    products = get_products()
+    return [p for p in products if query_lower in p[1].lower()]
 
 
 @client.event
@@ -133,27 +122,31 @@ async def on_message(message):
         matches = find_product(query)
 
         if matches:
-            await check_stock(matches[0], urls[matches[0]], send_to_channel=False, message=message, force=True)
-
+            await check_stock(matches[0], send_to_channel=False, message=message, force=True)
             if len(matches) > 1:
                 await send_embed(
                     message.channel,
                     "Other possible matches",
-                    "\n".join(matches[1:]),
+                    "\n".join(m[1] for m in matches[1:]),
                     discord.Color.dark_blue()
                 )
         else:
+            all_names = [p[1] for p in get_products()]
             await send_embed(
                 message.channel,
                 "No matches found",
-                "try one of these:\n" + "\n".join(urls.keys()),
+                "Try one of these:\n" + "\n".join(all_names),
                 discord.Color.orange()
             )
+
+@client.event
+async def on_message_edit(before, after):
+    pass
+
 
 def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
 
 threading.Thread(target=run_flask).start()
-
 client.run(TOKEN)
