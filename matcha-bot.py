@@ -80,7 +80,7 @@ async def check_stock(product, send_to_channel=True, message=None, force=False):
                 color = discord.Color.red()
             
             if send_to_channel or message:
-                target_channel = message.channel if message else client.get_channel(CHANNEL_ID)
+                target_channel = await client.fetch_channel(CHANNEL_ID)
                 await send_embed(target_channel, title, description, color, image_url)
     except Exception as e:
         error_msg = f"Error checking {name}: {e}"
