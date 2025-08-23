@@ -92,7 +92,14 @@ async def check_stock(product, send_to_channel=True, message=None, force=False):
 async def stock_loop():
     await client.wait_until_ready()
     channel = client.get_channel(CHANNEL_ID)
-    await send_embed(channel, "Matcha Bot is online!", "I will notify you when matcha is in stock :3\nType !nameofproduct to check it status!", color=discord.Color.blue())
+    
+    #instructions for user
+    instructions = ("**Hi! I'm Matcha Bot.**\n"
+                    "Here are my commands:\n"
+                    "~ `!add <name> <url>` -> add a new product to track.\n"
+                    "~ `!check <name> -> check the stock status of a product.\n"
+                    "~ `!list` -> show all tracked products.\n"
+                    "\n I will also notify you when stock changes!")
     
     while not client.is_closed():
         products = get_products()
@@ -117,8 +124,37 @@ async def on_message(message):
     if message.author == client.user:
         return
     
-    if message.content.lower().startswith("!check"):
-        query = message.content[len("!check"):].strip()
+    content = message.content.strip()
+
+    #add product command
+    if content.lower().startswith("!add "):
+        try:
+            parts = content.split(" ", 2)
+            if len(parts) < 3:
+                await send_embed(message.channel, "Usage", "!add <Product Name> <URL>", discord.Color.orange())
+                return
+            
+            name = parts[1].strip()
+            url = parts[2].strip()
+
+            status, image_url = scrape_product_info(url)
+
+            add_product(name, url, status == "in stock")
+
+            await send_embed(
+                message.channel,
+                "Product has been added.",
+                f" **{name}** has been added.\nStatus: {status}\nURL: <{url}>",
+                discord.Color.green(),
+                image_url
+            )
+        except Exception as e:
+            await send_embed(message.channel, "Error", f"Could not add product: {e}", discord.Color.red())
+        return
+
+    #check command
+    if content.lower().startswith("!check"):
+        query = content[len("!check"):].strip()
         matches = find_product(query)
 
         if matches:
@@ -138,6 +174,30 @@ async def on_message(message):
                 "Try one of these:\n" + "\n".join(all_names),
                 discord.Color.orange()
             )
+        return
+    
+    #list command
+    if content.lower().startswith("!list"):
+        products = get_products()
+        if products:
+            product_lines = [
+                f"~ **{p[1]}** - {'In stock' if p[3] else 'Sold Out'}\n<{p[2]}>"
+                for p in products
+            ]
+            await send_embed(
+                message.channel,
+                "Tracked Products",
+                "\n".join(product_lines),
+                discord.Color.purple()
+            )
+        else:
+            await send_embed(
+                message.channel,
+                "Tracked Products",
+                "No products are being tracked yet. Use `!add <name> <url>` to add a product.",
+                discord.Color.orange()
+            )
+        return
 
 @client.event
 async def on_message_edit(before, after):
