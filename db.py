@@ -1,9 +1,6 @@
-import psycopg2
 import os
-from dotenv import load_dotenv
+import psycopg2
 from datetime import datetime
-
-load_dotenv()
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
@@ -12,13 +9,20 @@ DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 def get_connection():
-    return psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD
-    )
+    try:
+        conn = psycopg2.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD
+        )
+        return conn
+    except psycopg2.OperationalError as e:
+        print("❌ Failed to connect to Postgres!")
+        print("Check your DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD")
+        print("Error:", e)
+        raise
 
 def add_product(name, url, in_stock=False):
     conn = get_connection()
@@ -58,11 +62,7 @@ def get_products():
 def get_product_by_name(name):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute("""
-        SELECT id, name, url, in_stock, last_checked
-        FROM products
-        WHERE name ILIKE %s;
-     """, (name,))
+    cur.execute("SELECT id, name, url, in_stock, last_checked FROM products WHERE name=%s;", (name,))
     product = cur.fetchone()
     cur.close()
     conn.close()
