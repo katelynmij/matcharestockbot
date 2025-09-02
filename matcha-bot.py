@@ -101,11 +101,13 @@ async def stock_loop():
                     "~ `!list` -> show all tracked products.\n"
                     "\n I will also notify you when stock changes!")
     
+    await send_embed(channel, "Matcha Bot is online!", instructions, discord.Color.blue())
+
     while not client.is_closed():
         products = get_products()
         for product in products:
             await check_stock(product)
-        await asyncio.sleep(60 * 5) #check every five minutes
+        await asyncio.sleep(60 * 5) #checks every five minutes
 
 def find_product(query):
     #fuzzy matching
